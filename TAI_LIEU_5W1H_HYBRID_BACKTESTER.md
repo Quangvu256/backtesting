@@ -14,7 +14,7 @@
 |---|---|
 | **Tên dự án** | Hybrid Backtester — Hệ thống kiểm thử chiến lược giao dịch lai (Vectorized + Event-Driven) |
 | **Mục tiêu** | Tối ưu siêu tham số (parameter optimization) trên tập train bằng vectorized engine tốc độ cao, sau đó xác nhận (validate) trên tập test bằng event-driven engine mô phỏng sát thực tế |
-| **Chiến lược mặc định** | Moving Average Crossover (SMA ngắn cắt SMA dài) |
+| **Chiến lược mặc định** | Moving Average Crossover (EMA ngắn cắt EMA dài) |
 | **Chế độ vận hành** | 2 chế độ: `single` (train/test split cố định) và `wfo` (Walk-Forward Optimization) |
 | **Giao diện** | CLI (Command-Line Interface) qua `argparse` |
 | **Triết lý thiết kế** | Monolith single-file, zero external API dependency, reproducible (synthetic data seeded) |
@@ -195,21 +195,21 @@ DataHandler.update_bars()
 
 | 5W1H | Chi tiết |
 |---|---|
-| **What** | Strategy cụ thể: phát tín hiệu LONG/EXIT dựa trên giao cắt (crossover) giữa SMA ngắn và SMA dài |
+| **What** | Strategy cụ thể: phát tín hiệu LONG/EXIT dựa trên giao cắt (crossover) giữa EMA ngắn và EMA dài |
 | **Why** | Là chiến lược trend-following kinh điển, dễ hiểu, phổ biến trong backtesting research |
 | **Where** | `hybrid_backtester.py` dòng 149–200 |
 | **When** | Được kích hoạt mỗi khi nhận `MarketEvent`. Chỉ phát signal khi có đủ `long_window` bar |
 | **Who** | `EventDrivenBacktester` gọi `calculate_signals()`. Output signal được `Portfolio` tiêu thụ |
-| **How** | Tính SMA(short) và SMA(long) trên close prices. So sánh → chuyển state machine `OUT ↔ LONG`. Chi tiết bên dưới |
+| **How** | Tính EMA(short) và EMA(long) trên close prices bằng `ewm(span=...)`. So sánh → chuyển state machine `OUT ↔ LONG`. Chi tiết bên dưới |
 
 **Bảng State Machine:**
 
 | Trạng thái hiện tại | Điều kiện | Tín hiệu phát ra | Trạng thái mới |
 |---|---|---|---|
-| `OUT` | `SMA_short > SMA_long` | `LONG` (strength=1.0) | `LONG` |
-| `LONG` | `SMA_short < SMA_long` | `EXIT` (strength=1.0) | `OUT` |
-| `OUT` | `SMA_short < SMA_long` | _(không phát)_ | `OUT` |
-| `LONG` | `SMA_short > SMA_long` | _(không phát)_ | `LONG` |
+| `OUT` | `EMA_short > EMA_long` | `LONG` (strength=1.0) | `LONG` |
+| `LONG` | `EMA_short < EMA_long` | `EXIT` (strength=1.0) | `OUT` |
+| `OUT` | `EMA_short < EMA_long` | _(không phát)_ | `OUT` |
+| `LONG` | `EMA_short > EMA_long` | _(không phát)_ | `LONG` |
 
 **Thuật toán `calculate_signals()` — Step-by-step:**
 
@@ -218,9 +218,9 @@ DataHandler.update_bars()
 | 1 | Kiểm tra `event.type == MARKET`. Nếu không → return ngay |
 | 2 | Duyệt từng `symbol` trong `symbol_list` |
 | 3 | Lấy `long_window` bar gần nhất. Nếu chưa đủ → skip |
-| 4 | Trích chuỗi close prices → tính `short_sma = mean(tail short_window)` |
-| 5 | Tính `long_sma = mean(toàn bộ long_window bar)` |
-| 6 | So sánh SMA + trạng thái hiện tại → quyết định phát `SignalEvent` hay không |
+| 4 | Trích chuỗi close prices → tính `short_ema = ewm(span=short_window).mean().iloc[-1]` |
+| 5 | Tính `long_ema = ewm(span=long_window).mean().iloc[-1]` |
+| 6 | So sánh EMA + trạng thái hiện tại → quyết định phát `SignalEvent` hay không |
 
 ---
 
@@ -375,15 +375,15 @@ RETURN portfolio.output_summary_stats(), portfolio.create_equity_curve_dataframe
 | **Where** | `hybrid_backtester.py` dòng 515–559 |
 | **When** | Được gọi trong grid search (train) và validation (test OOS) |
 | **Who** | `vectorized_grid_search()`, `run_hybrid_pipeline()`, `run_walk_forward_optimization()` |
-| **How** | `rolling().mean()` → binary signal → `shift(1)` → strategy_returns = position × market_returns − transaction_cost |
+| **How** | `ewm(span=...).mean()` → binary signal → `shift(1)` → strategy_returns = position × market_returns − transaction_cost |
 
 **Luồng xử lý Vectorized:**
 
 ```
 close_prices
     │
-    ├──► fast_ma = rolling(short_window).mean()
-    ├──► slow_ma = rolling(long_window).mean()
+    ├──► fast_ma = ewm(span=short_window).mean()
+    ├──► slow_ma = ewm(span=long_window).mean()
     │
     ▼
 raw_signal = (fast_ma > slow_ma).astype(float)    [1.0 = LONG, 0.0 = OUT]
@@ -409,7 +409,7 @@ compute_performance_metrics(strategy_returns)
 | 5W1H | Chi tiết |
 |---|---|
 | **What** | Brute-force tìm kiếm tổ hợp `(short_window, long_window)` tốt nhất trên tập train |
-| **Why** | Tối ưu hóa siêu tham số — tìm cặp MA cho Sharpe ratio cao nhất |
+| **Why** | Tối ưu hóa siêu tham số — tìm cặp EMA cho Sharpe ratio cao nhất |
 | **Where** | `hybrid_backtester.py` dòng 562–588 |
 | **When** | Phase 1 của cả 2 mode (single và wfo) |
 | **Who** | `run_hybrid_pipeline()`, `run_walk_forward_optimization()` |
@@ -665,7 +665,7 @@ Fold 3:             [████ TRAIN ████][▓▓ TEST ▓▓]
 | 5 | `FillEvent` | Dataclass | 45–53 | Event | Xác nhận thực thi (price, commission) |
 | 6 | `HistoricDataHandler` | Class | 56–141 | Data | Drip-feed OHLCV, ngăn look-ahead bias |
 | 7 | `Strategy` | Class (ABC) | 144–146 | Strategy | Abstract base cho chiến lược |
-| 8 | `MovingAverageCrossStrategy` | Class | 149–200 | Strategy | SMA crossover, state machine OUT↔LONG |
+| 8 | `MovingAverageCrossStrategy` | Class | 149–200 | Strategy | EMA crossover, state machine OUT↔LONG |
 | 9 | `Portfolio` | Class | 203–385 | Portfolio | Quản lý position/holdings/equity curve |
 | 10 | `SimulatedExecutionHandler` | Class | 388–423 | Execution | Slippage + commission simulation |
 | 11 | `EventDrivenBacktester` | Class | 426–463 | Orchestrator | Main event loop dispatcher |

@@ -173,11 +173,11 @@ class MovingAverageCrossStrategy(Strategy):
                 continue
 
             closes = pd.Series([bar[1]["close"] for bar in bars], dtype=float)
-            short_sma = float(closes.iloc[-self.short_window :].mean())
-            long_sma = float(closes.mean())
+            short_ema = float(closes.ewm(span=self.short_window, min_periods=self.short_window).mean().iloc[-1])
+            long_ema = float(closes.ewm(span=self.long_window, min_periods=self.long_window).mean().iloc[-1])
             dt = bars[-1][0]
 
-            if short_sma > long_sma and self.market_state[symbol] == "OUT":
+            if short_ema > long_ema and self.market_state[symbol] == "OUT":
                 self.events.put(
                     SignalEvent(
                         symbol=symbol,
@@ -188,7 +188,7 @@ class MovingAverageCrossStrategy(Strategy):
                 )
                 self.market_state[symbol] = "LONG"
 
-            elif short_sma < long_sma and self.market_state[symbol] == "LONG":
+            elif short_ema < long_ema and self.market_state[symbol] == "LONG":
                 self.events.put(
                     SignalEvent(
                         symbol=symbol,
@@ -525,8 +525,8 @@ def vectorized_ma_backtest(
     if len(prices) < long_window + 2:
         raise ValueError("Not enough data for given windows.")
 
-    fast_ma = prices.rolling(short_window, min_periods=short_window).mean()
-    slow_ma = prices.rolling(long_window, min_periods=long_window).mean()
+    fast_ma = prices.ewm(span=short_window, min_periods=short_window).mean()
+    slow_ma = prices.ewm(span=long_window, min_periods=long_window).mean()
     raw_signal = (fast_ma > slow_ma).astype(float)
     position = raw_signal.shift(1).fillna(0.0)
 
