@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 XGBoost Quant Dashboard — Stock Trading Signals</title>
+    <meta name="description" content="Dashboard phân tích chứng khoán Việt Nam với XGBoost ML Ensemble + Gemini AI Sentiment. Tín hiệu đầu tư ngắn hạn & dài hạn.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- ─── TOP BAR ──────────────────────────────────────────── -->
+    <header id="topbar">
+        <div class="topbar-left">
+            <div class="logo">
+                <span class="logo-icon">◈</span>
+                <span class="logo-text">XGBoost<span class="logo-accent">Quant</span></span>
+            </div>
+            <span class="logo-badge">RESEARCH</span>
+        </div>
+        <nav id="watchlist-tabs" class="topbar-center">
+            <!-- Rendered by JS -->
+        </nav>
+        <div class="topbar-right">
+            <div class="timeframe-selector" id="timeframe-selector">
+                <button class="tf-btn" data-days="30">1M</button>
+                <button class="tf-btn active" data-days="90">3M</button>
+                <button class="tf-btn" data-days="180">6M</button>
+                <button class="tf-btn" data-days="365">1Y</button>
+                <button class="tf-btn" data-days="730">2Y</button>
+            </div>
+            <button id="refresh-btn" class="icon-btn" title="Refresh Data">⟳</button>
+        </div>
+    </header>
+
+    <!-- ─── MAIN LAYOUT ─────────────────────────────────────── -->
+    <main id="app-main">
+        <!-- LEFT SIDEBAR: Stock Info -->
+        <aside id="sidebar">
+            <div id="stock-hero" class="glass-card">
+                <div class="hero-symbol" id="hero-symbol">---</div>
+                <div class="hero-price-row">
+                    <span class="hero-price" id="hero-price">—</span>
+                    <span class="hero-change" id="hero-change">—</span>
+                </div>
+                <div class="hero-signal" id="hero-signal">
+                    <span class="signal-badge" id="signal-badge">N/A</span>
+                    <span class="signal-score" id="signal-score">Score: —</span>
+                </div>
+            </div>
+
+            <div id="watchlist-cards" class="sidebar-section">
+                <!-- Rendered by JS -->
+            </div>
+
+            <div id="model-health" class="glass-card sidebar-section">
+                <h3 class="section-title">🤖 Model Status</h3>
+                <div id="model-health-content">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER: Chart + Panels -->
+        <section id="content-area">
+            <!-- Chart -->
+            <div id="chart-container" class="glass-card">
+                <div id="main-chart"></div>
+            </div>
+
+            <!-- Bottom Panels -->
+            <div id="bottom-panels" class="glass-card">
+                <div class="panel-tabs">
+                    <button class="panel-tab active" data-panel="technical">📈 Technical</button>
+                    <button class="panel-tab" data-panel="signals">🎯 Signals</button>
+                    <button class="panel-tab" data-panel="news">📰 News</button>
+                    <button class="panel-tab" data-panel="models">🧠 Models</button>
+                    <button class="panel-tab" data-panel="future">Forecast</button>
+                    <button class="panel-tab" data-panel="backtest">📊 Backtest</button>
+                </div>
+
+                <div class="panel-content" id="panel-technical" style="display:block;">
+                    <div id="technical-content" class="panel-body">
+                        <div class="loading-skeleton"></div>
+                    </div>
+                </div>
+
+                <div class="panel-content" id="panel-signals" style="display:none;">
+                    <div id="signals-content" class="panel-body">
+                        <div class="loading-skeleton"></div>
+                    </div>
+                </div>
+
+                <div class="panel-content" id="panel-news" style="display:none;">
+                    <div id="news-content" class="panel-body">
+                        <div class="loading-skeleton"></div>
+                    </div>
+                </div>
+
+                <div class="panel-content" id="panel-models" style="display:none;">
+                    <div id="models-content" class="panel-body">
+                        <div class="loading-skeleton"></div>
+                    </div>
+                </div>
+
+                <div class="panel-content" id="panel-future" style="display:none;">
+                    <div id="future-content" class="panel-body">
+                        <div class="loading-skeleton"></div>
+                    </div>
+                </div>
+
+                <div class="panel-content" id="panel-backtest" style="display:none;">
+                    <div id="backtest-content" class="panel-body">
+                        <div id="backtest-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ─── SCRIPTS ──────────────────────────────────────────── -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

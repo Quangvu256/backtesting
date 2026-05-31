@@ -385,6 +385,118 @@ class Portfolio:
         }
 
 
+class XGBoostPortfolio(Portfolio):
+    def __init__(
+        self,
+        data_handler: HistoricDataHandler,
+        events: Queue,
+        start_date: pd.Timestamp,
+        initial_capital: float = 100000.0,
+        order_size: int = 100,
+        db_manager=None,
+        kelly_fraction: float = 0.5,
+        max_risk_pct: float = 0.2
+    ) -> None:
+        super().__init__(data_handler, events, start_date, initial_capital, order_size)
+        from database import DatabaseManager
+        self.db_manager = db_manager if db_manager else DatabaseManager()
+        self.kelly_fraction = kelly_fraction  # Hệ số Fractional Kelly
+        self.max_risk_pct = max_risk_pct      # Giới hạn phân bổ tối đa cho một mã cổ phiếu
+
+    def generate_order_from_signal(self, signal: SignalEvent) -> Optional[OrderEvent]:
+        signal_type = signal.signal_type.upper()
+        symbol = signal.symbol
+        current_qty = self.current_positions[symbol]
+
+        if signal_type == "EXIT":
+            if current_qty > 0:
+                return OrderEvent(
+                    symbol=symbol,
+                    order_type="MKT",
+                    quantity=abs(current_qty),
+                    direction="SELL",
+                )
+            if current_qty < 0:
+                return OrderEvent(
+                    symbol=symbol,
+                    order_type="MKT",
+                    quantity=abs(current_qty),
+                    direction="BUY",
+                )
+
+        if signal_type == "LONG" and current_qty == 0:
+            close_price = self.data_handler.get_latest_bar_value(symbol, "close")
+            if close_price <= 0:
+                return None
+
+            dt_str = signal.datetime.strftime('%Y-%m-%d %H:%M:%S')
+            dt_date_str = signal.datetime.strftime('%Y-%m-%d')
+
+            # Các tham số phân bổ Kelly mặc định
+            confidence = 0.60
+            expected_return = 0.015
+
+            query = """
+            SELECT confidence, decision_metadata
+            FROM ensemble_decisions
+            WHERE symbol = ? AND (timestamp = ? OR timestamp LIKE ?)
+            ORDER BY timestamp DESC LIMIT 1
+            """
+
+            try:
+                import json
+                with self.db_manager.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(query, (symbol, dt_str, f"{dt_date_str}%"))
+                    row = cursor.fetchone()
+                    if row:
+                        confidence = float(row['confidence']) if row['confidence'] else 0.60
+                        meta = json.loads(row['decision_metadata']) if row['decision_metadata'] else {}
+                        predictions = meta.get("predictions", {})
+                        expected_return = float(predictions.get("reg_5d", {}).get("expected_return", 0.015))
+            except Exception:
+                pass
+
+            # Ràng buộc expected return an toàn
+            expected_return = max(0.005, expected_return)
+
+            # Thiết lập tỷ số Risk-Reward động dựa trên kỳ vọng lợi nhuận
+            b = 1.5 + (expected_return * 10)
+
+            # Công thức Kelly: f* = (p * b - (1 - p)) / b
+            p = confidence
+            f_star = (p * b - (1.0 - p)) / b
+
+            # Áp dụng Fractional Kelly
+            f_kelly = self.kelly_fraction * f_star
+
+            # Ràng buộc tỷ lệ vốn phân bổ trong khoảng [2%, max_risk_pct]
+            f_kelly = max(0.02, min(self.max_risk_pct, f_kelly))
+
+            # Tính toán lượng tiền mặt cần phân bổ động
+            total_equity = self.current_holdings["total"]
+            target_value = f_kelly * total_equity
+
+            # Giới hạn không vượt quá lượng tiền mặt thực tế đang có
+            total_cash = self.current_holdings["cash"]
+            target_value = min(target_value, total_cash * 0.95)
+
+            dynamic_quantity = int(target_value / close_price)
+
+            # Làm tròn về lô 10 cổ phiếu theo quy chuẩn thị trường
+            dynamic_quantity = (dynamic_quantity // 10) * 10
+            dynamic_quantity = max(10, dynamic_quantity)
+
+            return OrderEvent(
+                symbol=symbol,
+                order_type="MKT",
+                quantity=dynamic_quantity,
+                direction="BUY",
+            )
+
+        return None
+
+
 class SimulatedExecutionHandler:
     def __init__(
         self,
